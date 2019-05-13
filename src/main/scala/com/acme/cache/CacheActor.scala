@@ -3,18 +3,19 @@ package com.acme.cache
 import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 import akka.actor.typed.scaladsl._
 import com.acme.cache.CacheActor._
+import com.acme.cache.CacheActorManager.{CacheActorManagerMessage, CacheActorRegisterNotification, CacheActorTimeoutNotification}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
-class CacheActor(context: ActorContext[CacheActorMessage], key: String)
+class CacheActor(context: ActorContext[CacheActorMessage], key: String, cacheManager: ActorRef[CacheActorManagerMessage])
                 (implicit backendClient: BackendClient[BackendRequest]) extends AbstractBehavior[CacheActorMessage] with BackendClientService {
 
     private var cacheValue: String = ""
     val buffer: StashBuffer[CacheActorMessage] = StashBuffer[CacheActorMessage](capacity = 100)
     val timerKey = s"timerKey-$key"
-    val timerDelay: FiniteDuration = 5 seconds
+    val timerDelay: FiniteDuration = 1 minute
 
 
     def onMessage(msg: CacheActorMessage): Behavior[CacheActorMessage] = init(msg)
@@ -41,6 +42,7 @@ class CacheActor(context: ActorContext[CacheActorMessage], key: String)
             context.log.debug(template = "Received backend response - ",response)
             timer.startSingleTimer(timerKey, CacheActorTimeout, timerDelay)
             cacheValue = response
+            cacheManager ! CacheActorRegisterNotification(key, context.self)
             replyTo ! CacheActorSuccess(response)
             buffer.unstashAll(context, available(msg))
         case BackendErrorResponse(e,replyTo) ⇒
@@ -56,7 +58,7 @@ class CacheActor(context: ActorContext[CacheActorMessage], key: String)
             available(msg)
 
         case CacheActorTimeout ⇒
-//            cacheManager ! CacheActorManagerTimeout(key)
+            cacheManager ! CacheActorTimeoutNotification(key)
             context.log.info( template = "Cache Actor is being stopped - {}", key)
             Behaviors.stopped
     }
@@ -79,9 +81,8 @@ object CacheActor {
     trait CacheActorResponse
     final case class CacheActorSuccess(response: String) extends CacheActorResponse
     final case class CacheActorFailure(e: Throwable) extends CacheActorResponse
-    final case class CacheActorTimeOut(key: String) extends CacheActorResponse
 
-    def apply(key: String)(implicit backendClient: BackendClient[BackendRequest]): Behavior[CacheActorMessage] =
-        Behaviors.setup(context ⇒ new CacheActor(context, key))
+    def apply(key: String, cacheManager:ActorRef[CacheActorManagerMessage])(implicit backendClient: BackendClient[BackendRequest]): Behavior[CacheActorMessage] =
+        Behaviors.setup(context ⇒ new CacheActor(context, key, cacheManager))
 }
 
