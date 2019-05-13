@@ -13,7 +13,7 @@ import akka.cluster.sharding.typed.ShardingEnvelope
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityRef, EntityTypeKey}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
-import com.acme.cache.CacheActor.{BackendClientResponse, CacheActorMessage, CacheActorRequest}
+import com.acme.cache.CacheActor.{CacheActorResponse, CacheActorMessage, CacheActorRequest}
 import com.acme.cache.CacheServer.typedActorSystem
 
 import scala.concurrent.duration._

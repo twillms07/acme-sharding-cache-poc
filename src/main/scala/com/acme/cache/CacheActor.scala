@@ -14,7 +14,7 @@ class CacheActor(context: ActorContext[CacheActorMessage], key: String)
     private var cacheValue: String = ""
     val buffer: StashBuffer[CacheActorMessage] = StashBuffer[CacheActorMessage](capacity = 100)
     val timerKey = s"timerKey-$key"
-    val timerDelay: FiniteDuration = 1 minutes
+    val timerDelay: FiniteDuration = 5 seconds
 
 
     def onMessage(msg: CacheActorMessage): Behavior[CacheActorMessage] = init(msg)
@@ -41,18 +41,18 @@ class CacheActor(context: ActorContext[CacheActorMessage], key: String)
             context.log.debug(template = "Received backend response - ",response)
             timer.startSingleTimer(timerKey, CacheActorTimeout, timerDelay)
             cacheValue = response
-            replyTo ! BackendClientSuccess(response)
+            replyTo ! CacheActorSuccess(response)
             buffer.unstashAll(context, available(msg))
         case BackendErrorResponse(e,replyTo) ⇒
             context.log.error(template = "Received backend error - ",e.getMessage)
-            replyTo ! BackendClientFailure(e)
+            replyTo ! CacheActorFailure(e)
             buffer.unstashAll(context, init(msg))
     }
 
     def available(msg: CacheActorMessage): Behavior[CacheActorMessage] = Behaviors.receiveMessage {
         case CacheActorRequest(request, replyTo) ⇒
             context.log.debug(template = "Received backend response - ",request)
-            replyTo ! BackendClientSuccess(cacheValue)
+            replyTo ! CacheActorSuccess(cacheValue)
             available(msg)
 
         case CacheActorTimeout ⇒
@@ -71,14 +71,15 @@ class CacheActor(context: ActorContext[CacheActorMessage], key: String)
 object CacheActor {
 
     trait CacheActorMessage
-    final case class CacheActorRequest(request:String, replyTo: ActorRef[BackendClientResponse]) extends CacheActorMessage
-    final case class BackendResponse(response: String, replyTo: ActorRef[BackendClientResponse]) extends CacheActorMessage
-    final case class BackendErrorResponse(e:Throwable, replyTo: ActorRef[BackendClientResponse]) extends CacheActorMessage
+    final case class CacheActorRequest(request:String, replyTo: ActorRef[CacheActorResponse]) extends CacheActorMessage
+    final case class BackendResponse(response: String, replyTo: ActorRef[CacheActorResponse]) extends CacheActorMessage
+    final case class BackendErrorResponse(e:Throwable, replyTo: ActorRef[CacheActorResponse]) extends CacheActorMessage
     final case object CacheActorTimeout extends CacheActorMessage
 
-    trait BackendClientResponse
-    final case class BackendClientSuccess(response: String) extends BackendClientResponse
-    final case class BackendClientFailure(e: Throwable) extends BackendClientResponse
+    trait CacheActorResponse
+    final case class CacheActorSuccess(response: String) extends CacheActorResponse
+    final case class CacheActorFailure(e: Throwable) extends CacheActorResponse
+    final case class CacheActorTimeOut(key: String) extends CacheActorResponse
 
     def apply(key: String)(implicit backendClient: BackendClient[BackendRequest]): Behavior[CacheActorMessage] =
         Behaviors.setup(context ⇒ new CacheActor(context, key))
