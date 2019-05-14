@@ -15,7 +15,7 @@ class CacheActor(context: ActorContext[CacheActorMessage], key: String, cacheMan
     private var cacheValue: String = ""
     val buffer: StashBuffer[CacheActorMessage] = StashBuffer[CacheActorMessage](capacity = 100)
     val timerKey = s"timerKey-$key"
-    val timerDelay: FiniteDuration = 1 minute
+    val timerDelay: FiniteDuration = 5 seconds
 
 
     def onMessage(msg: CacheActorMessage): Behavior[CacheActorMessage] = init(msg)
